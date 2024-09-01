@@ -11,13 +11,21 @@ import http from 'http'
 import { Socket } from 'net'
 import { v7 as uuid } from 'uuid'
 import promBundle from 'express-prom-bundle'
-import { z, ZodError, ZodObject, ZodString, type ZodTypeAny, type ZodRawShape, type ZodSchema, ZodNumber, ZodArray } from 'zod'
+import {
+    z,
+    ZodError,
+    ZodObject,
+    ZodString,
+    type ZodTypeAny,
+    type ZodRawShape,
+    type ZodSchema,
+    ZodNumber,
+    ZodArray,
+} from 'zod'
 import { fromZodError } from 'zod-validation-error'
-import swaggerJsDoc from 'swagger-jsdoc';
-import swaggerUi from 'swagger-ui-express';
+import swaggerJsDoc from 'swagger-jsdoc'
+import swaggerUi from 'swagger-ui-express'
 import { SwaggerDoc } from './swagger'
-
-
 
 const transaction = 'x-transaction-id'
 const metricsMiddleware = promBundle({ includeMethod: true })
@@ -30,7 +38,14 @@ type ExtractParams<T extends string> = T extends `${infer _Start}:${infer Param}
 
 type ParamsObject<T extends string[]> = { [K in T[number]]: string }
 
-type RouteHandler<P, B, Q> = (ctx: { params: P; body: B; query: Q, req: Request, res: Response, next: NextFunction }) => Promise<BaseResponse>
+type RouteHandler<P, B, Q> = (ctx: {
+    params: P
+    body: B
+    query: Q
+    req: Request
+    res: Response
+    next: NextFunction
+}) => Promise<BaseResponse>
 
 enum HttpMethod {
     GET = 'get',
@@ -40,7 +55,12 @@ enum HttpMethod {
     DELETE = 'delete',
 }
 
-interface Route<T extends string = string, P extends ZodTypeAny = any, B extends ZodTypeAny = any, Q extends ZodTypeAny = any> {
+interface Route<
+    T extends string = string,
+    P extends ZodTypeAny = any,
+    B extends ZodTypeAny = any,
+    Q extends ZodTypeAny = any
+> {
     path: T
     method: HttpMethod
     handler: RouteHandler<P, B, Q>
@@ -49,6 +69,7 @@ interface Route<T extends string = string, P extends ZodTypeAny = any, B extends
         body?: ZodSchema<B>
         query?: ZodSchema<Q>
         middleware?: RequestHandler
+        detail?: SwaggerDetail
     }
 }
 
@@ -140,18 +161,53 @@ function globalErrorHandler(error: unknown, _request: Request, response: Respons
 export type AppSwagger = {
     path: string
     method: HttpMethod
-    tag: string
+    detail?: SwaggerDetail
     body: Record<string, any>
     query: Record<string, any>
     params: Record<string, any>
     response: Record<string, any>
 }
 
+type TSwaggerObject = {
+    name: string
+    type: string
+    required: boolean | false
+    description?: string
+}
+
+type TResponses = {
+    type: 'object' | 'array' | 'string' | 'number' | 'boolean'
+    properties?:
+    | Record<string, { type: string; default?: string | number | object | []; nullable?: boolean }>
+    | Record<string, TResponses>
+    | Record<string, { type: string; properties: TResponses }>
+    items?: TResponses | { type: string } | { type: string; properties: TResponses }
+}
+
+type IParameters = {
+    in: 'path' | 'query'
+    name: string
+    schema: { type: string; enum?: string[]; default?: string | number | object | [] }
+    required: boolean
+}
+
+type SwaggerDetail = {
+    tags?: string[]
+    summary?: string
+    description?: string
+    query?: IParameters[]
+    body?: TSwaggerObject[]
+    response?: {
+        success?: TResponses
+        'bad request'?: TResponses
+        'internal server error'?: TResponses
+    }
+    params?: IParameters[]
+}
 
 class BaseRouter {
     public routes: Route[] = []
     protected swaggerPath: AppSwagger[] = []
-
 
     protected createHandler(
         handler: RouteHandler<any, any, any>,
@@ -179,7 +235,9 @@ class BaseRouter {
         })
     }
 
-    private validateRequest(req: Request, schemas?: { params?: ZodSchema<any>; body?: ZodSchema<any>; query?: ZodSchema<any> }
+    private validateRequest(
+        req: Request,
+        schemas?: { params?: ZodSchema<any>; body?: ZodSchema<any>; query?: ZodSchema<any> }
     ) {
         if (schemas?.params) schemas.params.parse(req.params)
         if (schemas?.body) schemas.body.parse(req.body)
@@ -231,7 +289,13 @@ class BaseRouter {
         method: HttpMethod,
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         this.routes.push({ path, method, handler, schemas })
         return this
@@ -240,7 +304,13 @@ class BaseRouter {
     public get<T extends string, P = ParamsObject<ExtractParams<T>>, B = unknown, Q = unknown>(
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         return this.addRoute(HttpMethod.GET, path, handler, schemas)
     }
@@ -248,7 +318,13 @@ class BaseRouter {
     public post<T extends string, P = ParamsObject<ExtractParams<T>>, B = unknown, Q = unknown>(
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         return this.addRoute(HttpMethod.POST, path, handler, schemas)
     }
@@ -256,7 +332,13 @@ class BaseRouter {
     public put<T extends string, P = ParamsObject<ExtractParams<T>>, B = unknown, Q = unknown>(
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         return this.addRoute(HttpMethod.PUT, path, handler, schemas)
     }
@@ -264,7 +346,13 @@ class BaseRouter {
     public patch<T extends string, P = ParamsObject<ExtractParams<T>>, B = unknown, Q = unknown>(
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         return this.addRoute(HttpMethod.PATCH, path, handler, schemas)
     }
@@ -272,7 +360,13 @@ class BaseRouter {
     public delete<T extends string, P = ParamsObject<ExtractParams<T>>, B = unknown, Q = unknown>(
         path: T,
         handler: RouteHandler<P, B, Q>,
-        schemas?: { params?: ZodSchema<P>; body?: ZodSchema<B>; query?: ZodSchema<Q>; middleware?: RequestHandler }
+        schemas?: {
+            params?: ZodSchema<P>
+            body?: ZodSchema<B>
+            query?: ZodSchema<Q>
+            middleware?: RequestHandler
+            detail?: SwaggerDetail
+        }
     ) {
         return this.addRoute(HttpMethod.DELETE, path, handler, schemas)
     }
@@ -280,41 +374,41 @@ class BaseRouter {
 
 function zodToObject(schema: ZodSchema<any>): any {
     if (schema instanceof ZodString) {
-        return 'string';
+        return 'string'
     } else if (schema instanceof ZodNumber) {
-        return 'number';
+        return 'number'
     } else if (schema instanceof ZodArray) {
-        const innerType = zodToObject(schema._def.type);
-        return [innerType];
+        const innerType = zodToObject(schema._def.type)
+        return [innerType]
     } else if (schema instanceof ZodObject) {
-        const shape = schema.shape;
-        const obj: Record<string, any> = {};
+        const shape = schema.shape
+        const obj: Record<string, any> = {}
         for (const key in shape) {
-            obj[key] = zodToObject(shape[key]);
+            obj[key] = zodToObject(shape[key])
         }
-        return obj;
+        return obj
     } else {
-        return 'unknown';
+        return 'unknown'
     }
 }
 
 function zodToSwagger(schema: ZodSchema<any>): any {
     if (schema instanceof ZodString) {
-        return { type: 'string' };
+        return { type: 'string' }
     } else if (schema instanceof ZodNumber) {
-        return { type: 'number' };
+        return { type: 'number' }
     } else if (schema instanceof ZodArray) {
-        const innerType = zodToSwagger(schema._def.type);
-        return { type: 'array', items: innerType };
+        const innerType = zodToSwagger(schema._def.type)
+        return { type: 'array', items: innerType }
     } else if (schema instanceof ZodObject) {
-        const shape = schema.shape;
-        const obj: Record<string, any> = { type: 'object', properties: {} };
+        const shape = schema.shape
+        const obj: Record<string, any> = { type: 'object', properties: {} }
         for (const key in shape) {
-            obj.properties[key] = zodToSwagger(shape[key]);
+            obj.properties[key] = zodToSwagger(shape[key])
         }
-        return obj;
+        return obj
     } else {
-        return { type: 'unknown' };
+        return { type: 'unknown' }
     }
 }
 
@@ -341,12 +435,15 @@ class AppServer extends BaseRouter {
 
     public router(path: string, router: AppRouter, ...middleware: RequestHandler[]) {
         router?.routes?.forEach((r) => {
-            const jsonString = r.handler.toString().split('return')[1].replace('}}', '}').replace(/(\w+):/g, '"$1":')
-            const tag = r.path.split('/:')[0].replace('/', '').toLocaleUpperCase()
+            const jsonString = r.handler
+                .toString()
+                .split('return')[1]
+                .replace('}}', '}')
+                .replace(/(\w+):/g, '"$1":')
             const schemaObject: AppSwagger = {
                 path: `${path}${r.path}`,
                 method: r.method,
-                tag: path.includes('api') ? tag : `${path}`.replace('/', '').toLocaleUpperCase(),
+                detail: r.schemas?.detail,
                 body: r.schemas?.body ? zodToObject(r.schemas.body) : {},
                 query: r.schemas?.query ? zodToObject(r.schemas.query) : {},
                 params: r.schemas?.params ? zodToObject(r.schemas.params) : {},
@@ -354,9 +451,6 @@ class AppServer extends BaseRouter {
             }
             this.swaggerPath.push(schemaObject)
         })
-
-
-
         this.app.use(path, middleware, router.register())
         this.routes.length = 0
     }
@@ -365,9 +459,7 @@ class AppServer extends BaseRouter {
         try {
             return JSON.parse(str)
         } catch (error) {
-            return {
-
-            }
+            return {}
         }
     }
 
@@ -377,16 +469,19 @@ class AppServer extends BaseRouter {
     }
 
     public listen(port: number | string, close?: () => Promise<void> | void) {
-
         this.routes.forEach((route) => {
             const { path, handler, schemas, method } = route
             const middlewares = schemas?.middleware ? [schemas.middleware] : []
             const schemaObject = createZodSchema(path)
-            const jsonString = handler.toString().split('return')[1].replace('}}', '}').replace(/(\w+):/g, '"$1":')
+            const jsonString = handler
+                .toString()
+                .split('return')[1]
+                .replace('}}', '}')
+                .replace(/(\w+):/g, '"$1":')
             const schema: AppSwagger = {
                 path: path,
                 method: method,
-                tag: path.split('/:')[0].replace('/', '').toLocaleUpperCase(),
+                detail: schemas?.detail,
                 body: schemas?.body ? zodToObject(schemas.body) : {},
                 query: schemas?.query ? zodToObject(schemas.query) : {},
                 params: schemas?.params ? zodToObject(schemas.params) : {},
@@ -399,15 +494,16 @@ class AppServer extends BaseRouter {
 
         this.app._router.stack.forEach((middleware: any) => {
             if (middleware.name === 'SwaggerInitUi') {
-                const swaggerOptions = SwaggerDoc.apiDoc(this.swaggerPath)
+                const swaggerOptions = new SwaggerDoc().apiDoc(this.swaggerPath)
 
                 const swaggerSpec = swaggerJsDoc(swaggerOptions)
-                this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+                this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec))
             }
-        });
+        })
+
+        console.log('swaggerPath', this.swaggerPath)
         this.swaggerPath.length = 0
         this.routes.length = 0
-
 
         this.app.use((req: Request, res: Response, _next: NextFunction) => {
             res.status(404).json({ message: 'Unknown URL', path: req.originalUrl })
@@ -459,32 +555,32 @@ class AppServer extends BaseRouter {
 
 // Function to List All Routes
 const listRoutes = (app: Application) => {
-    const routes: { method: string; path: string }[] = [];
+    const routes: { method: string; path: string }[] = []
 
     app._router.stack.forEach((middleware: any) => {
-        console.log('middleware', middleware.name);
+        console.log('middleware', middleware.name)
         if (middleware.route) {
             // Routes registered directly on the app
-            const { path, stack } = middleware.route;
-            const methods = stack.map((layer: any) => layer.method.toUpperCase());
-            methods.forEach((method: string) => routes.push({ method, path }));
+            const { path, stack } = middleware.route
+            const methods = stack.map((layer: any) => layer.method.toUpperCase())
+            methods.forEach((method: string) => routes.push({ method, path }))
             // console.log('middleware', JSON.stringify(middleware.route));
         } else if (middleware.name === 'router') {
             // Routes registered on routers
             middleware.handle.stack.forEach((handler: any) => {
-                const { route } = handler;
+                const { route } = handler
                 if (route) {
-                    const { path, stack } = route;
+                    const { path, stack } = route
 
-                    const methods = stack.map((layer: any) => layer.method.toUpperCase());
-                    methods.forEach((method: string) => routes.push({ method, path }));
+                    const methods = stack.map((layer: any) => layer.method.toUpperCase())
+                    methods.forEach((method: string) => routes.push({ method, path }))
                 }
-            });
+            })
         }
-    });
+    })
 
-    console.table(routes);
-};
+    console.table(routes)
+}
 
 class AppRouter extends BaseRouter {
     constructor(private readonly instance: Router = Router()) {
@@ -500,12 +596,9 @@ class AppRouter extends BaseRouter {
             this.instance.route(path)[method](...m, this.createHandler(handler, schemas, schemaObject))
         })
 
-
         return this.instance
     }
 }
 
 export { z as t, AppRouter }
 export default AppServer
-
-
