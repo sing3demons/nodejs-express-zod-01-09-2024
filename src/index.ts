@@ -1,5 +1,4 @@
-import { Application } from "express";
-import AppServer, { AppRouter, t } from "./server";
+import AppServer, { AppRouter, SwaggerInitUi, t } from "./server";
 
 
 // Example schemas
@@ -24,6 +23,8 @@ app.get('/profile',
     }, { query: querySchema }).post('/profile', async ({ body }) => {
         return { data: 'profile' };
     })
+
+app.use(SwaggerInitUi)
 
 class Auth {
     constructor(private readonly router: AppRouter) { }
@@ -55,7 +56,6 @@ router.get(
         return { data: { id: params.id } };
     },
     {
-        params: paramsSchema,
         middleware: (req, res, next) => {
             console.log('Middleware executed');
             next();

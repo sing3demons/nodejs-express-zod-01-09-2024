@@ -16,7 +16,6 @@ import { fromZodError } from 'zod-validation-error'
 import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { SwaggerDoc } from './swagger'
-import swaggerJSDoc from 'swagger-jsdoc'
 
 
 
@@ -278,6 +277,7 @@ class BaseRouter {
         return this.addRoute(HttpMethod.DELETE, path, handler, schemas)
     }
 }
+
 function zodToObject(schema: ZodSchema<any>): any {
     if (schema instanceof ZodString) {
         return 'string';
@@ -297,6 +297,31 @@ function zodToObject(schema: ZodSchema<any>): any {
         return 'unknown';
     }
 }
+
+function zodToSwagger(schema: ZodSchema<any>): any {
+    if (schema instanceof ZodString) {
+        return { type: 'string' };
+    } else if (schema instanceof ZodNumber) {
+        return { type: 'number' };
+    } else if (schema instanceof ZodArray) {
+        const innerType = zodToSwagger(schema._def.type);
+        return { type: 'array', items: innerType };
+    } else if (schema instanceof ZodObject) {
+        const shape = schema.shape;
+        const obj: Record<string, any> = { type: 'object', properties: {} };
+        for (const key in shape) {
+            obj.properties[key] = zodToSwagger(shape[key]);
+        }
+        return obj;
+    } else {
+        return { type: 'unknown' };
+    }
+}
+
+export function SwaggerInitUi(req: Request, res: Response, next: NextFunction) {
+    next()
+}
+
 class AppServer extends BaseRouter {
     private readonly app: Express = express()
     constructor(cb?: () => void) {
@@ -346,8 +371,8 @@ class AppServer extends BaseRouter {
         }
     }
 
-    public use(middleware: RequestHandler[]) {
-        this.app.use(middleware)
+    public use(...middleware: RequestHandler[]) {
+        this.app.use(...middleware)
         return this
     }
 
@@ -372,16 +397,17 @@ class AppServer extends BaseRouter {
             this.app.route(path)[method](...middlewares, this.createHandler(handler, schemas, schemaObject))
         })
 
+        this.app._router.stack.forEach((middleware: any) => {
+            if (middleware.name === 'SwaggerInitUi') {
+                const swaggerOptions = SwaggerDoc.apiDoc(this.swaggerPath)
 
-
-
-        const swaggerOptions = SwaggerDoc.apiDoc(this.swaggerPath)
-
-        const swaggerSpec = swaggerJsDoc(swaggerOptions)
+                const swaggerSpec = swaggerJsDoc(swaggerOptions)
+                this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+            }
+        });
         this.swaggerPath.length = 0
         this.routes.length = 0
 
-        this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
         this.app.use((req: Request, res: Response, _next: NextFunction) => {
             res.status(404).json({ message: 'Unknown URL', path: req.originalUrl })
@@ -436,6 +462,7 @@ const listRoutes = (app: Application) => {
     const routes: { method: string; path: string }[] = [];
 
     app._router.stack.forEach((middleware: any) => {
+        console.log('middleware', middleware.name);
         if (middleware.route) {
             // Routes registered directly on the app
             const { path, stack } = middleware.route;
@@ -456,7 +483,7 @@ const listRoutes = (app: Application) => {
         }
     });
 
-    // console.table(routes);
+    console.table(routes);
 };
 
 class AppRouter extends BaseRouter {
