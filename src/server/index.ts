@@ -192,6 +192,7 @@ type IParameters = {
 }
 
 type SwaggerDetail = {
+    path?: string
     tags?: string[]
     summary?: string
     description?: string

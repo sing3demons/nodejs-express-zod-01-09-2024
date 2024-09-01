@@ -151,7 +151,7 @@ export class SwaggerDoc {
                 }
             })) || []
 
-            this.swagger.paths[path][method] = {
+            this.swagger.paths[detail?.path || path][method] = {
                 summary: detail?.summary || `${method.toUpperCase()} ${path}`,
                 description: detail?.description,
                 tags: detail?.tags || ['default'],
